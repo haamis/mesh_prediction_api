@@ -1,4 +1,4 @@
-import pickle, sys
+import pickle, re, sys
 import tensorflow as tf
 import numpy as np
 
@@ -10,8 +10,6 @@ from keras.models import load_model
 from keras_bert import get_custom_objects
 
 from bert import tokenization
-
-import time
 
 # Prediction part
 
@@ -44,55 +42,60 @@ def tokenize(abstracts, maxlen=512):
         ret_val.append(abstract)
     return ret_val, tokenizer.vocab
 
-def make_binary_prediction(abstracts):
+def make_binary_prediction(abstract):
 
     #print(abstracts)
 
-    if not isinstance(abstracts, list):
-        abstracts = [abstracts]
-        print("listified")
+    # if not isinstance(abstracts, list):
+    #     abstracts = [abstracts]
+    #     print("listified")
 
     print("Tokenizing")
-    start = time.time()
-    abstracts, vocab = tokenize(abstracts, maxlen=maxlen)
-    end = time.time()
-    print(end - start)
+    abstract = ["[CLS]"] + tokenizer.tokenize(abstract[0:maxlen-2]) + ["[SEP]"]
+    vocab = tokenizer.vocab
 
     print("Vectorizing")
-    start = time.time()
-    token_vectors = np.asarray( [np.asarray( [vocab[token] for token in abstract] + [0] * (maxlen - len(abstract)) ) for abstract in abstracts] )
-    end = time.time()
-    print(end - start)
-    del abstracts
+    #token_vectors = np.asarray( [np.asarray( [vocab[token] for token in abstract] + [0] * (maxlen - len(abstract)) ) for abstract in abstracts] )
+    token_vectors = np.asarray( [vocab[token] for token in abstract] + [0] * (maxlen - len(abstract)) )
+    #del abstracts
+    
+    # with graph.as_default():
+    #     print("Predicting probs")
+    #     probs = model.predict([token_vectors, np.zeros_like(token_vectors)])
+        
+    #     print("Probs to binary")
+    #     preds = np.zeros_like(probs)
+    #     preds[probs>0.5] = 1
+        
+    #     #print(probs)
+    #     #print(preds)
+    #     print("Aggregating results")
+    #     results = []
+    #     for prediction in preds:
+    #         if prediction[1] == 1:
+    #             results.append(True)
+    #         else:
+    #             results.append(False)        
+    #     return results
+
+    # Model expects a list of samples, we only have one.
+    token_vectors = [token_vectors]
     
     with graph.as_default():
         print("Predicting probs")
-        start = time.time()
         probs = model.predict([token_vectors, np.zeros_like(token_vectors)])
-        end = time.time()
-        print(end - start)
         
         print("Probs to binary")
-        start = time.time()
         preds = np.zeros_like(probs)
         preds[probs>0.5] = 1
-        end = time.time()
-        print(end - start)
         
         #print(probs)
         #print(preds)
         print("Aggregating results")
-        start = time.time()
-        results = []
-        for prediction in preds:
-            if prediction[1] == 1:
-                results.append(True)
-            else:
-                results.append(False)
-        end = time.time()
-        print(end - start)
-        
-        return results
+        if preds[0][1] == 1:
+            return True
+        else:
+            return False
 
 # Web server part. Yes, this is a bit messy.
 
@@ -102,9 +105,22 @@ app = Flask(__name__)
 
 @app.route('/binary_prediction', methods = ['POST'])
 def binary_prediction():
-    #print(request.json)
-    results = make_binary_prediction(request.json)
-    return Response(json.dumps(results), status=200, mimetype='application/json')
+    
+    ret_val = []
+    for entry in request.json:
+        if re.search(r"Finland", entry["country"]):
+            ret_val.append(make_binary_prediction(entry["abstract"]))
+
+        # Check for "Finland" in any of the author strings.
+        if any([re.search(r"Finland", author) for author in entry["authors"]]):
+            print([re.search(r"Finland", author) for author in entry["authors"]])
+            print(entry["authors"])
+            ret_val.append(make_binary_prediction(entry["abstract"]))
+        else:
+            ret_val.append(False)
+
+    #results = make_binary_prediction(request.json[])
+    return Response(json.dumps(ret_val), status=200, mimetype='application/json')
 
 if __name__ == '__main__':
     app.run()
