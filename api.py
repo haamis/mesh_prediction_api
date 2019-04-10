@@ -1,126 +1,64 @@
-import pickle, re, sys
-import tensorflow as tf
-import numpy as np
-
-import keras_metrics
-
-from keras.backend.tensorflow_backend import set_session
-from keras.models import load_model
-
-from keras_bert import get_custom_objects
-
-from bert import tokenization
-
-# Prediction part
-
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
-set_session(tf.Session(config=config))
-
-maxlen = 384
-
-custom_objects = get_custom_objects()
-custom_objects["tf"] = tf
-custom_objects["keras_metrics"] = keras_metrics
-custom_objects["binary_precision"] = keras_metrics.binary_precision()
-custom_objects["binary_recall"] = keras_metrics.binary_recall()
-
-model = load_model(sys.argv[1], custom_objects=custom_objects)
-
-graph = tf.get_default_graph()
-tokenizer = tokenization.FullTokenizer("../biobert_pubmed/vocab.txt", do_lower_case=False)
+import pickle, re
+from flask import Flask, Response, request, json
 
 def load_data(file_name):
 
     with open(file_name, "rb") as f:
         return pickle.load(f)
 
-def tokenize(abstracts, maxlen=512):
-    ret_val = []
-    for abstract in abstracts:
-        abstract = ["[CLS]"] + tokenizer.tokenize(abstract[0:maxlen-2]) + ["[SEP]"]
-        ret_val.append(abstract)
-    return ret_val, tokenizer.vocab
-
-def make_binary_prediction(abstract):
-
-    #print(abstracts)
-
-    # if not isinstance(abstracts, list):
-    #     abstracts = [abstracts]
-    #     print("listified")
-
-    print("Tokenizing")
-    abstract = ["[CLS]"] + tokenizer.tokenize(abstract[0:maxlen-2]) + ["[SEP]"]
-    vocab = tokenizer.vocab
-
-    print("Vectorizing")
-    #token_vectors = np.asarray( [np.asarray( [vocab[token] for token in abstract] + [0] * (maxlen - len(abstract)) ) for abstract in abstracts] )
-    token_vectors = np.asarray( [vocab[token] for token in abstract] + [0] * (maxlen - len(abstract)) )
-    #del abstracts
-    
-    # with graph.as_default():
-    #     print("Predicting probs")
-    #     probs = model.predict([token_vectors, np.zeros_like(token_vectors)])
-        
-    #     print("Probs to binary")
-    #     preds = np.zeros_like(probs)
-    #     preds[probs>0.5] = 1
-        
-    #     #print(probs)
-    #     #print(preds)
-    #     print("Aggregating results")
-    #     results = []
-    #     for prediction in preds:
-    #         if prediction[1] == 1:
-    #             results.append(True)
-    #         else:
-    #             results.append(False)        
-    #     return results
-
-    # Model expects a list of samples, we only have one.
-    token_vectors = [token_vectors]
-    
-    with graph.as_default():
-        print("Predicting probs")
-        probs = model.predict([token_vectors, np.zeros_like(token_vectors)])
-        
-        print("Probs to binary")
-        preds = np.zeros_like(probs)
-        preds[probs>0.5] = 1
-        
-        #print(probs)
-        #print(preds)
-        print("Aggregating results")
-        if preds[0][1] == 1:
-            return True
-        else:
-            return False
-
-# Web server part. Yes, this is a bit messy.
-
-from flask import Flask, Response, request, json
-
 app = Flask(__name__)
 
-@app.route('/binary_prediction', methods = ['POST'])
-def binary_prediction():
-    
+pubmed_data = load_data("../tiny_output.dump")
+
+@app.route('/articles', methods=["GET"])
+def articles():
+    print(request.args)
     ret_val = []
-    for entry in request.json:
-        if re.search(r"Finland", entry["country"]):
-            ret_val.append(make_binary_prediction(entry["abstract"]))
+    if request.args.get("author"):
+        print(request.args.get("author"))
+        for article in pubmed_data:
+            if any( [ request.args["author"] in author["name"] for author in article["authors"] ] ):
+                ret_val.append(article)
 
-        # Check for "Finland" in any of the author strings.
-        if any([re.search(r"Finland", author) for author in entry["authors"]]):
-            print([re.search(r"Finland", author) for author in entry["authors"]])
-            print(entry["authors"])
-            ret_val.append(make_binary_prediction(entry["abstract"]))
-        else:
-            ret_val.append(False)
+    if request.args.get("mesh"):
+        for article in pubmed_data:
+            for term in request.args.getlist("mesh"):
+                if any( [ author == term for author in article["mesh_terms"] ] ):
+                    ret_val.append(article)
+    
+    ret_val = list(ret_val)
 
-    #results = make_binary_prediction(request.json[])
-    return Response(json.dumps(ret_val), status=200, mimetype='application/json')
+    return Response(json.dumps(ret_val, indent=2, sort_keys=True), status=200, mimetype="application/json")
+
+@app.route("/all_finnish_authors", methods=["GET"])
+def all_finnish_authors():
+    ret_val = set()
+    for article in pubmed_data:
+        for author in article["authors"]:
+            if re.search(r"Finland", author["affiliation"]):
+                ret_val.add((author["name"], author["affiliation"]))
+
+    ret_val = list(ret_val)
+
+    return Response(json.dumps(ret_val, indent=2, sort_keys=True), status=200, mimetype="application/json")
+
+# @app.route("/binary_prediction", methods=["POST"])
+# def binary_prediction():
+    
+#     ret_val = []
+#     for entry in request.json:
+#         if re.search(r"Finland", entry["country"]):
+#             ret_val.append(make_binary_prediction(entry["abstract"]))
+
+#         # Check for "Finland" in any of the author strings.
+#         if any([re.search(r"Finland", author) for author in entry["authors"]]):
+#             print(entry["authors"])
+#             ret_val.append(make_binary_prediction(entry["abstract"]))
+#         else:
+#             ret_val.append(False)
+
+#     #results = make_binary_prediction(request.json[])
+#     return Response(json.dumps(ret_val, indent=2, sort_keys=True), status=200, mimetype="application/json")
 
 if __name__ == '__main__':
     app.run()
