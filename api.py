@@ -1,5 +1,5 @@
-import pickle, re
-from flask import Flask, Response, request, json
+import pickle, re, sqlite3
+from flask import Flask, Response, request, json, jsonify, url_for
 
 def load_data(file_name):
 
@@ -8,7 +8,15 @@ def load_data(file_name):
 
 app = Flask(__name__)
 
-pubmed_data = load_data("../tiny_output.dump")
+db = sqlite3.connect("../test.db")
+c = db.cursor()
+
+@app.route('/', methods=['GET'])
+def root():
+    response = {}
+    response["articles"] = url_for("articles")
+    response["all_finnish_authors"] = url_for("all_finnish_authors")
+    return jsonify(response)
 
 @app.route('/articles', methods=["GET"])
 def articles():
@@ -28,7 +36,7 @@ def articles():
     
     ret_val = list(ret_val)
 
-    return Response(json.dumps(ret_val, indent=2, sort_keys=True), status=200, mimetype="application/json")
+    return jsonify(ret_val)
 
 @app.route("/all_finnish_authors", methods=["GET"])
 def all_finnish_authors():
@@ -40,7 +48,7 @@ def all_finnish_authors():
 
     ret_val = list(ret_val)
 
-    return Response(json.dumps(ret_val, indent=2, sort_keys=True), status=200, mimetype="application/json")
+    return jsonify(ret_val)
 
 # @app.route("/binary_prediction", methods=["POST"])
 # def binary_prediction():
