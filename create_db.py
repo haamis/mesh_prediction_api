@@ -1,15 +1,21 @@
-import json, re, sqlite3, sys
+import json, lzma, re, sqlite3, sys
 from tqdm import tqdm
+
+print("Creating DB..", file=sys.stderr)
 
 db = sqlite3.connect(sys.argv[2])
 #c = db.cursor()
 
-db.execute("CREATE TABLE authors (f_name text, l_name text, affiliation text, mesh_terms text)")
+db.execute("CREATE TABLE authors (f_name text, l_name text)")
+db.execute("CREATE TABLE author_affiliation (f_name text, l_name text, affiliation text)")
+db.execute("CREATE TABLE author_mesh (f_name text, l_name text, mesh_terms text)")
 db.execute("CREATE TABLE articles (pubmed_id integer, abstract text, pub_year integer, title text)")
-db.execute("CREATE TABLE article_mesh (pubmed_id integer, mesh text)")
 db.execute("CREATE TABLE article_authors (pubmed_id integer, f_name text, l_name text, affiliation text)")
+db.execute("CREATE TABLE article_mesh (pubmed_id integer, mesh text)")
 
-with open(sys.argv[1]) as f:
+print("Reading file..", file=sys.stderr)
+
+with lzma.open(sys.argv[1]) as f:
     data = json.load(f)
 
 #articles = []
@@ -20,8 +26,8 @@ with db:
         if any([re.search(r"Finland", author[2]) for author in article["author_list"]]):            
             fin_count += 1
             abstract = article["abstract"]
-            authors = ( (author[0], author[1], author[2])  for author in article["author_list"] )
-            mesh_list = ( part["mesh_name"] for part in article["mesh_list"] )
+            authors = [ (author[0], author[1], author[2])  for author in article["author_list"] ]
+            mesh_list = [ part["mesh_name"] for part in article["mesh_list"] ]
             pub_year = article["pub_year"]
             pubmed_id = article["pubmed_id"]
             title = article["title"]
