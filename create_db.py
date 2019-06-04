@@ -1,26 +1,26 @@
 import json, lzma, re, sqlite3, sys
 from tqdm import tqdm
 
-print("Creating DB..", file=sys.stderr)
-
-db = sqlite3.connect(sys.argv[2])
-#c = db.cursor()
-
-db.execute("CREATE TABLE authors (f_name text, l_name text)")
-db.execute("CREATE TABLE author_affiliation (f_name text, l_name text, affiliation text)")
-db.execute("CREATE TABLE author_mesh (f_name text, l_name text, mesh_terms text)")
-db.execute("CREATE TABLE articles (pubmed_id integer, abstract text, pub_year integer, title text)")
-db.execute("CREATE TABLE article_authors (pubmed_id integer, f_name text, l_name text, affiliation text)")
-db.execute("CREATE TABLE article_mesh (pubmed_id integer, mesh text)")
-
 print("Reading file..", file=sys.stderr)
 
 with lzma.open(sys.argv[1]) as f:
     data = json.load(f)
 
-#articles = []
+print("Creating DB..", file=sys.stderr)
+
+db = sqlite3.connect(sys.argv[2])
 
 with db:
+
+    db.execute("CREATE TABLE authors ( f_name TEXT, l_name TEXT, UNIQUE(f_name, l_name) )")
+    db.execute("CREATE TABLE author_affiliations ( f_name TEXT, l_name TEXT, affiliation TEXT, \
+                FOREIGN KEY(f_name, l_name) REFERENCES authors(f_name, l_name) )")
+    db.execute("CREATE TABLE author_mesh ( f_name TEXT, l_name TEXT, mesh TEXT, \
+                FOREIGN KEY(f_name, l_name) REFERENCES authors(f_name, l_name) )")
+    db.execute("CREATE TABLE articles ( pubmed_id INTEGER PRIMARY KEY, abstract TEXT, pub_year INTEGER, title TEXT )")
+    db.execute("CREATE TABLE article_authors ( pubmed_id INTEGER REFERENCES articles(pubmed_id), f_name TEXT, l_name TEXT, affiliation TEXT )")
+    db.execute("CREATE TABLE article_mesh ( pubmed_id INTEGER REFERENCES articles(pubmed_id), mesh TEXT, UNIQUE(pubmed_id, mesh) )")
+    
     fin_count = 0
     for article in tqdm(data, desc="Processing"):
         if any([re.search(r"Finland", author[2]) for author in article["author_list"]]):            
@@ -32,11 +32,20 @@ with db:
             pubmed_id = article["pubmed_id"]
             title = article["title"]
 
-            db.execute("INSERT INTO articles(pubmed_id, abstract, pub_year, title) VALUES (?,?,?,?)", (pubmed_id, abstract, pub_year, title) )
+            db.execute("INSERT INTO articles(pubmed_id, abstract, pub_year, title) VALUES (?,?,?,?)",
+                        (pubmed_id, abstract, pub_year, title) )
             for author in authors:
-                db.execute("INSERT INTO article_authors(pubmed_id, f_name, l_name, affiliation) VALUES (?,?,?,?)", (pubmed_id, author[0], author[1], author[2]) )
+                db.execute("INSERT INTO article_authors(pubmed_id, f_name, l_name, affiliation) VALUES (?,?,?,?)",
+                            (pubmed_id, author[0], author[1], author[2]) )
                 if re.search(r"Finland", author[2]):
-                    print("Finnish author:", author[:])
+                    db.execute("INSERT OR IGNORE INTO authors(f_name, l_name) VALUES (?,?)",
+                                (author[0], author[1]) )
+                    db.execute("INSERT OR IGNORE INTO author_affiliations(f_name, l_name, affiliation) VALUES (?,?,?)",
+                                (author[0], author[1], author[2]) )
+                    for mesh in mesh_list:
+                        db.execute("INSERT OR IGNORE INTO author_mesh(f_name, l_name, mesh) VALUES (?,?,?)",
+                                    (author[0], author[1], mesh) )
+                    # print("Finnish author:", author[:])
             for mesh in mesh_list:
                 db.execute("INSERT INTO article_mesh(pubmed_id, mesh) VALUES (?,?)", (pubmed_id, mesh) )
 
