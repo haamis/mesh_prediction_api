@@ -1,54 +1,42 @@
-import pickle, re, sqlite3
+import  sqlite3
 from flask import Flask, Response, request, json, jsonify, url_for
-
-def load_data(file_name):
-
-    with open(file_name, "rb") as f:
-        return pickle.load(f)
 
 app = Flask(__name__)
 
-db = sqlite3.connect("../test.db")
-c = db.cursor()
+db = sqlite3.connect("../test.db", check_same_thread=False)
+db.row_factory = sqlite3.Row
+#c = db.cursor()
 
 @app.route('/', methods=['GET'])
 def root():
     response = {}
     response["articles"] = url_for("articles")
-    response["all_finnish_authors"] = url_for("all_finnish_authors")
     return jsonify(response)
 
 @app.route('/articles', methods=["GET"])
 def articles():
     print(request.args)
-    ret_val = []
+    sql = "SELECT DISTINCT articles.* FROM articles \
+            INNER JOIN article_authors ON articles.pubmed_id=article_authors.pubmed_id \
+            INNER JOIN article_mesh ON articles.pubmed_id=article_mesh.pubmed_id WHERE "
+    where_strs = []
+    params = []
     if request.args.get("author"):
-        print(request.args.get("author"))
-        for article in pubmed_data:
-            if any( [ request.args["author"] in author["name"] for author in article["authors"] ] ):
-                ret_val.append(article)
-
+        where_strs.append("article_authors.l_name LIKE ? \
+                        OR article_authors.f_name LIKE ?")
+        params.extend([request.args.get("author")]*2)
+        print(params)
     if request.args.get("mesh"):
-        for article in pubmed_data:
-            for term in request.args.getlist("mesh"):
-                if any( [ author == term for author in article["mesh_terms"] ] ):
-                    ret_val.append(article)
-    
-    ret_val = list(ret_val)
+        where_strs.append("article_mesh.mesh=?")
+        params.append(request.args.get("mesh"))
+    rows = db.execute(sql + " AND ".join(where_strs), params).fetchall()
 
-    return jsonify(ret_val)
+    return jsonify([dict(zip(row.keys(), row)) for row in rows ])
 
-@app.route("/all_finnish_authors", methods=["GET"])
-def all_finnish_authors():
-    ret_val = set()
-    for article in pubmed_data:
-        for author in article["authors"]:
-            if re.search(r"Finland", author["affiliation"]):
-                ret_val.add((author["name"], author["affiliation"]))
-
-    ret_val = list(ret_val)
-
-    return jsonify(ret_val)
+# @app.route("/all_finnish_authors", methods=["GET"])
+# def all_finnish_authors():
+#     ret_val = db.execute("SELECT * FROM authors")
+#     return jsonify(ret_val)
 
 # @app.route("/binary_prediction", methods=["POST"])
 # def binary_prediction():
