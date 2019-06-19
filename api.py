@@ -18,7 +18,7 @@ def root():
 @app.route('/articles', methods=["GET"])
 def articles():
     print(request.args)
-    sql = "SELECT DISTINCT articles.* FROM articles \
+    sql = "SELECT DISTINCT articles.pubmed_id FROM articles \
             INNER JOIN article_authors ON articles.pubmed_id=article_authors.pubmed_id \
             INNER JOIN article_mesh ON articles.pubmed_id=article_mesh.pubmed_id WHERE "
     where_strs = []
@@ -29,8 +29,11 @@ def articles():
         params.extend([request.args.get("author")]*2)
         print(params)
     if request.args.get("mesh"):
-        where_strs.append("article_mesh.mesh=?")
-        params.append(request.args.get("mesh"))
+        for mesh in request.args.getlist("mesh"):
+            where_strs.append("articles.pubmed_id IN (SELECT pubmed_id FROM article_mesh WHERE mesh = ?)")
+            params.append(mesh)
+        print(params)
+        print(sql + " AND ".join(where_strs))
     rows = db.execute(sql + " AND ".join(where_strs), params).fetchall()
 
     return jsonify([dict(zip(row.keys(), row)) for row in rows ])
@@ -42,16 +45,16 @@ def article_info():
     authors = [{"f_name": author[0], "l_name": author[1], "affiliation": author[2]} for author in authors]
     print(authors)
 
-    mesh_terms = db.execute("SELECT group_concat(mesh) FROM article_mesh WHERE pubmed_id=?",
+    mesh_terms = db.execute("SELECT group_concat(mesh, ';') FROM article_mesh WHERE pubmed_id=?",
                             (request.args.get("pubmed_id"),)).fetchone()
-    mesh_terms = mesh_terms[0].split(",")
+    mesh_terms = mesh_terms[0].split(";")
     print(mesh_terms)
     
-    other_stuff = db.execute("SELECT * FROM articles WHERE pubmed_id=?",
+    info = db.execute("SELECT * FROM articles WHERE pubmed_id=?",
                             (request.args.get("pubmed_id"),)).fetchone()
-    print(other_stuff)
+    print(info)
 
-    response = {thing[0]: thing[1] for thing in zip(other_stuff.keys(), other_stuff)}
+    response = {thing[0]: thing[1] for thing in zip(info.keys(), info)}
     response["authors"] = authors
     response["mesh"] = mesh_terms
 
@@ -59,21 +62,22 @@ def article_info():
 
 @app.route("/authors", methods=["GET"])
 def authors():
-    sql = "SELECT DISTINCT authors.* FROM authors \
+    sql = "SELECT DISTINCT * FROM authors \
             INNER JOIN article_authors ON authors.f_name=article_authors.f_name \
             INNER JOIN article_mesh ON article_authors.pubmed_id=article_mesh.pubmed_id WHERE "
     where_strs = []
     params = []
     if request.args.get("name"):
-        where_strs.append("article_authors.l_name LIKE ? \
-                        OR article_authors.f_name LIKE ?")
+        where_strs.append("(article_authors.l_name LIKE ? \
+                        OR article_authors.f_name LIKE ?)")
         params.extend([request.args.get("author")]*2)
         print(params)
     if request.args.get("mesh"):
         for mesh in request.args.getlist("mesh"):
-            where_strs.append("article_mesh.mesh=?")
+            where_strs.append("articles.pubmed_id IN (SELECT pubmed_id FROM article_mesh WHERE mesh = ?)")
             params.append(mesh)
         print(params)
+        print(sql + " AND ".join(where_strs))
     rows = db.execute(sql + " AND ".join(where_strs), params).fetchall()
 
     return jsonify([dict(zip(row.keys(), row)) for row in rows ])
