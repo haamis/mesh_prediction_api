@@ -50,9 +50,18 @@ def articles():
 
     if request.args.get("page_number"):
         limit_start = request.args.get("page_number") * limit_size
+
+    order_by = ""
+    if request.args.get("sort"):
+        order_by = " ORDER BY "
+        arg = request.args.get("sort")
+        if arg == "date_asc":
+            order_by += "articles.pub_year ASC"
+        if arg == "date_desc":
+            order_by += "articles.pub_year DESC"
     
     sql += " AND ".join(where_strs)
-    sql += " ORDER BY articles.pub_year"
+    sql += order_by
     sql += " LIMIT " + str(limit_start) + ", " + str(limit_size)
 
     print(sql)
@@ -123,9 +132,22 @@ def authors():
     if request.args.get("page_number"):
         # `page_number - 1` to start page numbering from 1.
         limit_start = (int(request.args.get("page_number")) - 1) * (limit_size)
+
+    order_by = ""
+    if request.args.get("sort"):
+        order_by = " ORDER BY "
+        arg = request.args.get("sort")
+        if arg == "f_name_asc":
+            order_by += "authors.f_name ASC"
+        if arg == "f_name_desc":
+            order_by += "authors.f_name DESC"
+        if arg == "l_name_asc":
+            order_by += "authors.l_name ASC"
+        if arg == "l_name_desc":
+            order_by += "authors.l_name DESC"
     
     sql += " AND ".join(where_strs)
-    #sql += " ORDER BY authors.l_name"
+    sql += order_by
     sql += " LIMIT " + str(limit_start) + ", " + str(limit_size)
 
     author_rows = db.execute(sql, params).fetchall()
@@ -157,8 +179,6 @@ def authors():
     for author, mesh_terms, affiliations in zip(author_rows, mesh_terms_list, affiliations_list):
         author["mesh"] = mesh_terms
         author["affiliations"] = affiliations
-        test = json.dumps(affiliations)
-        print(json.loads(test))
 
     return jsonify(author_rows)
 
