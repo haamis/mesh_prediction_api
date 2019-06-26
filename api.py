@@ -2,6 +2,7 @@ import  sqlite3
 from flask import Flask, Response, request, json, jsonify, url_for
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
 
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
@@ -158,9 +159,7 @@ def authors():
         author["mesh"] = mesh_terms
         author["affiliations"] = affiliations
 
-    response = jsonify(author_rows)
-    response.headers.set("Content-Type", "charset=utf-8")
-    return response
+    return jsonify(author_rows)
 
 
 @app.route("/article_info", methods=["GET"])
