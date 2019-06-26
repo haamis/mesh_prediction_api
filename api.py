@@ -32,9 +32,8 @@ def articles():
         params.append('%' + request.args.get("affiliation") + '%')
 
     if request.args.get("author_name"):
-        where_strs.append("article_authors.l_name LIKE ? \
-                        OR article_authors.f_name LIKE ?")
-        params.extend([request.args.get("author")]*2)
+        where_strs.append("article_authors.f_name || ' ' || article_authors.l_name LIKE ?")
+        params.append('%' + request.args.get("author_name") + '%')
 
     for mesh in request.args.getlist("mesh"):
         where_strs.append("articles.pubmed_id IN (SELECT pubmed_id FROM article_mesh WHERE mesh = ?)")
@@ -56,6 +55,9 @@ def articles():
     sql += " ORDER BY articles.pub_year"
     sql += " LIMIT " + str(limit_start) + ", " + str(limit_size)
 
+    print(sql)
+    print(params)
+
     article_rows = db.execute(sql, params).fetchall()
     
     # Change the sqlite3 Rows into dicts so they're mutable and JSON-able.
@@ -64,22 +66,25 @@ def articles():
     author_rows_list = []
     for row in article_rows:
         author_rows = db.execute("SELECT f_name, l_name, affiliation FROM article_authors WHERE pubmed_id=?",
-                            (row["pubmed_id"],)).fetchall()
+                                (row["pubmed_id"],)
+                                ).fetchall()
         author_rows_list.append(author_rows)
 
     mesh_terms_list = []
-    for row in author_rows:
-        mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, ';') FROM article_mesh \
+    for row in article_rows:
+        mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, '¤') FROM article_mesh \
                                 INNER JOIN article_authors ON article_mesh.pubmed_id=article_authors.pubmed_id \
-                                WHERE (article_authors.f_name LIKE ? AND article_authors.l_name LIKE ?)",
-                                (row["f_name"], row["l_name"])).fetchone()
-        mesh_terms = mesh_terms[0].split(";")
+                                WHERE article_mesh.pubmed_id = ?",
+                                (str(row["pubmed_id"]),)
+                                ).fetchone()
+        mesh_terms = mesh_terms[0].split("¤")
         mesh_terms = sorted(list(set(mesh_terms)))
         mesh_terms_list.append(mesh_terms)
 
-    for article, author_rows in zip(article_rows, author_rows_list):
+    for article, author_rows, mesh_terms in zip(article_rows, author_rows_list, mesh_terms_list):
         article["authors"] = [ {"f_name": author["f_name"], "l_name": author["l_name"],
                                 "affiliation": author["affiliation"]} for author in author_rows ]
+        article["mesh"] = mesh_terms
 
     return jsonify(article_rows)
 
@@ -95,12 +100,12 @@ def authors():
     params = []
     
     if request.args.get("affiliation"):
-        where_strs.append("authors.affiliation LIKE ?")
+        where_strs.append("article_authors.affiliation LIKE ?")
         params.append('%' + request.args.get("affiliation") + '%')
 
     if request.args.get("author_name"):
-        where_strs.append("(authors.f_name LIKE ? OR authors.l_name LIKE ?)")
-        params.extend([request.args.get("author_name")] * 2)
+        where_strs.append("authors.f_name || ' ' || authors.l_name LIKE ?")
+        params.append('%' + request.args.get("author_name") + '%')
 
     for mesh in request.args.getlist("mesh"):
         where_strs.append("article_mesh.pubmed_id IN (SELECT pubmed_id FROM article_mesh WHERE mesh = ?)")
@@ -127,36 +132,54 @@ def authors():
 
     mesh_terms_list = []
     for row in author_rows:
-        mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, ';') FROM article_mesh \
+        # Use the `¤` symbols as a delimiter
+        mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, '¤') FROM article_mesh \
                                 INNER JOIN article_authors ON article_mesh.pubmed_id=article_authors.pubmed_id \
                                 WHERE (article_authors.f_name LIKE ? AND article_authors.l_name LIKE ?)",
-                                (row["f_name"], row["l_name"])).fetchone()
-        mesh_terms = mesh_terms[0].split(";")
+                                (row["f_name"], row["l_name"])
+                                ).fetchone()
+        mesh_terms = mesh_terms[0].split("¤")
         mesh_terms = sorted(list(set(mesh_terms)))
         mesh_terms_list.append(mesh_terms)
 
+    affiliations_list = []
+    for row in author_rows:
+        affiliations = db.execute("SELECT DISTINCT group_concat(affiliation, '¤') FROM article_authors \
+                                    WHERE (article_authors.f_name LIKE ? AND article_authors.l_name LIKE ?)",
+                                    (row["f_name"], row["l_name"])
+                                    ).fetchone()
+        affiliations = affiliations[0].split("¤")
+        affiliations = sorted(list(set(affiliations)))
+        affiliations_list.append(affiliations)
+
     author_rows = [dict(zip(row.keys(), row)) for row in author_rows]
 
-    for author, mesh_terms in zip(author_rows, mesh_terms_list):
+    for author, mesh_terms, affiliations in zip(author_rows, mesh_terms_list, affiliations_list):
         author["mesh"] = mesh_terms
+        author["affiliations"] = affiliations
 
-    return jsonify(author_rows)
+    response = jsonify(author_rows)
+    response.headers.set("Content-Type", "charset=utf-8")
+    return response
 
 
 @app.route("/article_info", methods=["GET"])
 def article_info():
     author_rows = db.execute("SELECT f_name, l_name, affiliation FROM article_authors WHERE pubmed_id=?",
-                        (request.args.get("pubmed_id"),)).fetchall()
+                        (request.args.get("pubmed_id"),)
+                        ).fetchall()
     author_rows = [{"f_name": author[0], "l_name": author[1], "affiliation": author[2]} for author in author_rows]
     print(author_rows)
 
-    mesh_terms = db.execute("SELECT group_concat(mesh, ';') FROM article_mesh WHERE pubmed_id=?",
-                            (request.args.get("pubmed_id"),)).fetchone()
-    mesh_terms = mesh_terms[0].split(";")
+    mesh_terms = db.execute("SELECT group_concat(mesh, '¤') FROM article_mesh WHERE pubmed_id=?",
+                            (request.args.get("pubmed_id"),)
+                            ).fetchone()
+    mesh_terms = mesh_terms[0].split("¤")
     print(mesh_terms)
     
     info = db.execute("SELECT * FROM articles WHERE pubmed_id=?",
-                            (request.args.get("pubmed_id"),)).fetchone()
+                        (request.args.get("pubmed_id"),)
+                        ).fetchone()
     print(info)
 
     response = {thing[0]: thing[1] for thing in zip(info.keys(), info)}
