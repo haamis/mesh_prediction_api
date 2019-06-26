@@ -2,6 +2,7 @@ import  sqlite3
 from flask import Flask, Response, request, json, jsonify, url_for
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
 
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
