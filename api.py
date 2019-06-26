@@ -157,10 +157,10 @@ def authors():
     for author, mesh_terms, affiliations in zip(author_rows, mesh_terms_list, affiliations_list):
         author["mesh"] = mesh_terms
         author["affiliations"] = affiliations
+        test = json.dumps(affiliations)
+        print(json.loads(test))
 
-    response = jsonify(author_rows)
-    response.headers.set("Content-Type", "charset=utf-8")
-    return response
+    return jsonify(author_rows)
 
 
 @app.route("/article_info", methods=["GET"])
