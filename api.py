@@ -46,6 +46,8 @@ def articles():
 
     if request.args.get("per_page"):
         limit_size = request.args.get("per_page")
+        if limit_size > 100:
+            limit_size = 100
 
     if request.args.get("page_number"):
         limit_start = request.args.get("page_number") * limit_size
@@ -110,6 +112,8 @@ def authors():
 
     if request.args.get("per_page"):
         limit_size = int(request.args.get("per_page"))
+        if limit_size > 100:
+            limit_size = 100
 
     if request.args.get("page_number"):
         # `page_number - 1` to start page numbering from 1.
