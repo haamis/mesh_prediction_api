@@ -1,7 +1,10 @@
 import  sqlite3
 from flask import Flask, Response, request, json, jsonify, url_for
+from flask_caching import Cache
 
 app = Flask(__name__)
+
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
@@ -34,6 +37,7 @@ def root():
 
 
 @app.route('/articles', methods=["GET"])
+@cache.cached(timeout=60, query_string=True)
 def articles():
 
     sql = "SELECT DISTINCT abstract, pub_year, articles.pubmed_id, title FROM articles \
@@ -102,10 +106,13 @@ def articles():
 
 
 @app.route("/authors", methods=["GET"])
+@cache.cached(timeout=60, query_string=True)
 def authors():
 
+    print(request.args)
+
     sql = "SELECT DISTINCT authors.f_name, authors.l_name FROM authors \
-            INNER JOIN article_authors ON authors.f_name=article_authors.f_name \
+            INNER JOIN article_authors ON authors.f_name=article_authors.f_name AND authors.l_name=article_authors.l_name \
             INNER JOIN article_mesh ON article_authors.pubmed_id=article_mesh.pubmed_id WHERE "
     
     where_strs = []
@@ -142,6 +149,8 @@ def authors():
     sql += order_by
     sql += " LIMIT " + str(limit_start) + ", " + str(limit_size)
 
+    print(sql)
+
     author_rows = db.execute(sql, params).fetchall()
 
     mesh_terms_list = []
@@ -175,6 +184,7 @@ def authors():
 
 
 @app.route("/all_mesh_terms", methods=["GET"])
+@cache.cached(timeout=60, query_string=True)
 def all_mesh_terms():
     mesh_terms = db.execute("SELECT DISTINCT mesh from article_mesh")
     mesh_terms = [mesh[0] for mesh in mesh_terms]
