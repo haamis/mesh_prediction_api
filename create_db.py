@@ -41,6 +41,9 @@ with db:
                     l_name TEXT, \
                     UNIQUE(f_name, l_name) \
                 )")
+
+    # Index for mesh terms, everything else is taken care of by sqlite autoindexes.
+    db.execute("CREATE INDEX mesh_index ON article_mesh (mesh)")
     
     print(len(neuro_mesh_ids), file=sys.stderr)
     fin_count = 0
