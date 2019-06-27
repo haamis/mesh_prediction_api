@@ -26,9 +26,9 @@ def page_limits(per_page=None, page_number=None):
 def root():
 
     response = {}
-    response["articles"] = "params: affiliation, author_name, mesh"
-    response["authors"] = "params: affiliation, author_name, mesh"
-    response["article_info"] = "params: pubmed_id"
+    response["articles"] = "params: affiliation, author_name, mesh, per_page, page_number, sort=[date_asc|date_desc]"
+    response["authors"] = "params: affiliation, author_name, mesh, per_page, page_number, sort=[f_name_asc|f_name_desc|l_name_asc|l_name_desc]"
+    response["all_mesh_terms"] = "returns all unique mesh terms in the database"
 
     return jsonify(response)
 
