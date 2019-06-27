@@ -6,6 +6,22 @@ app = Flask(__name__)
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
 
+def page_limits(per_page=None, page_number=None):
+    # Default limit. Start from 0, return first 100 results
+    limit_start = 0
+    limit_size = 20
+
+    if per_page:
+        limit_size = int(per_page)
+        if limit_size > 100:
+            limit_size = 100
+
+    if page_number:
+        limit_start = (int(page_number) - 1) * limit_size
+
+    return limit_start, limit_size
+
+
 @app.route('/', methods=['GET'])
 def root():
 
@@ -39,17 +55,7 @@ def articles():
         where_strs.append("articles.pubmed_id IN (SELECT pubmed_id FROM article_mesh WHERE mesh = ?)")
         params.append(mesh)
 
-    # Default limit. Start from 0, return first 100 results
-    limit_start = 0
-    limit_size = 20
-
-    if request.args.get("per_page"):
-        limit_size = request.args.get("per_page")
-        if limit_size > 100:
-            limit_size = 100
-
-    if request.args.get("page_number"):
-        limit_start = request.args.get("page_number") * limit_size
+    limit_start, limit_size = page_limits(request.args.get("per_page"), request.args.get("page_number"))
 
     order_by = ""
     if request.args.get("sort"):
@@ -63,9 +69,6 @@ def articles():
     sql += " AND ".join(where_strs)
     sql += order_by
     sql += " LIMIT " + str(limit_start) + ", " + str(limit_size)
-
-    print(sql)
-    print(params)
 
     article_rows = db.execute(sql, params).fetchall()
     
@@ -120,18 +123,7 @@ def authors():
         where_strs.append("article_mesh.pubmed_id IN (SELECT pubmed_id FROM article_mesh WHERE mesh = ?)")
         params.append(mesh)
 
-    # Default limit. Start from 0, return first 20 results
-    limit_start = 0
-    limit_size = 20
-
-    if request.args.get("per_page"):
-        limit_size = int(request.args.get("per_page"))
-        if limit_size > 100:
-            limit_size = 100
-
-    if request.args.get("page_number"):
-        # `page_number - 1` to start page numbering from 1.
-        limit_start = (int(request.args.get("page_number")) - 1) * (limit_size)
+    limit_start, limit_size = page_limits(request.args.get("per_page"), request.args.get("page_number"))
 
     order_by = ""
     if request.args.get("sort"):
@@ -154,7 +146,6 @@ def authors():
 
     mesh_terms_list = []
     for row in author_rows:
-        # Use the `¤` symbols as a delimiter
         mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, '¤') FROM article_mesh \
                                 INNER JOIN article_authors ON article_mesh.pubmed_id=article_authors.pubmed_id \
                                 WHERE (article_authors.f_name LIKE ? AND article_authors.l_name LIKE ?)",
@@ -183,30 +174,37 @@ def authors():
     return jsonify(author_rows)
 
 
-@app.route("/article_info", methods=["GET"])
-def article_info():
-    author_rows = db.execute("SELECT f_name, l_name, affiliation FROM article_authors WHERE pubmed_id=?",
-                        (request.args.get("pubmed_id"),)
-                        ).fetchall()
-    author_rows = [{"f_name": author[0], "l_name": author[1], "affiliation": author[2]} for author in author_rows]
-    print(author_rows)
+@app.route("/all_mesh_terms", methods=["GET"])
+def all_mesh_terms():
+    mesh_terms = db.execute("SELECT DISTINCT mesh from article_mesh")
+    mesh_terms = [mesh[0] for mesh in mesh_terms]
 
-    mesh_terms = db.execute("SELECT group_concat(mesh, '¤') FROM article_mesh WHERE pubmed_id=?",
-                            (request.args.get("pubmed_id"),)
-                            ).fetchone()
-    mesh_terms = mesh_terms[0].split("¤")
-    print(mesh_terms)
+    return jsonify(mesh_terms)
+
+# @app.route("/article_info", methods=["GET"])
+# def article_info():
+#     author_rows = db.execute("SELECT f_name, l_name, affiliation FROM article_authors WHERE pubmed_id=?",
+#                         (request.args.get("pubmed_id"),)
+#                         ).fetchall()
+#     author_rows = [{"f_name": author[0], "l_name": author[1], "affiliation": author[2]} for author in author_rows]
+#     print(author_rows)
+
+#     mesh_terms = db.execute("SELECT group_concat(mesh, '¤') FROM article_mesh WHERE pubmed_id=?",
+#                             (request.args.get("pubmed_id"),)
+#                             ).fetchone()
+#     mesh_terms = mesh_terms[0].split("¤")
+#     print(mesh_terms)
     
-    info = db.execute("SELECT * FROM articles WHERE pubmed_id=?",
-                        (request.args.get("pubmed_id"),)
-                        ).fetchone()
-    print(info)
+#     info = db.execute("SELECT * FROM articles WHERE pubmed_id=?",
+#                         (request.args.get("pubmed_id"),)
+#                         ).fetchone()
+#     print(info)
 
-    response = {thing[0]: thing[1] for thing in zip(info.keys(), info)}
-    response["authors"] = author_rows
-    response["mesh"] = mesh_terms
+#     response = {thing[0]: thing[1] for thing in zip(info.keys(), info)}
+#     response["authors"] = author_rows
+#     response["mesh"] = mesh_terms
 
-    return jsonify(response)
+#     return jsonify(response)
 
 # @app.route("/binary_prediction", methods=["POST"])
 # def binary_prediction():
