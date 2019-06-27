@@ -4,7 +4,10 @@ from flask_caching import Cache
 
 app = Flask(__name__)
 
-cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+# CACHE_THRESHOLD sets the maximum amount entries allowed to be cached.
+# 512 should keep it under 512MB.
+cache = Cache(app, config={"CACHE_TYPE": "simple","CACHE_THRESHOLD": 512,
+                            "CACHE_DEFAULT_TIMEOUT": 3600})
 
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
@@ -37,7 +40,7 @@ def root():
 
 
 @app.route('/articles', methods=["GET"])
-@cache.cached(timeout=60, query_string=True)
+@cache.cached(query_string=True)
 def articles():
 
     sql = "SELECT DISTINCT abstract, pub_year, articles.pubmed_id, title FROM articles \
@@ -106,7 +109,7 @@ def articles():
 
 
 @app.route("/authors", methods=["GET"])
-@cache.cached(timeout=60, query_string=True)
+@cache.cached(query_string=True)
 def authors():
 
     print(request.args)
