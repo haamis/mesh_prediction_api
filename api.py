@@ -187,9 +187,9 @@ def authors():
 
 
 @app.route("/all_mesh_terms", methods=["GET"])
-@cache.cached(timeout=60, query_string=True)
+@cache.cached(query_string=True)
 def all_mesh_terms():
-    mesh_terms = db.execute("SELECT DISTINCT mesh from article_mesh")
+    mesh_terms = db.execute("SELECT DISTINCT mesh FROM article_mesh")
     mesh_terms = [mesh[0] for mesh in mesh_terms]
 
     return jsonify(mesh_terms)
