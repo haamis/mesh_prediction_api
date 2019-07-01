@@ -4,10 +4,10 @@ from flask_caching import Cache
 
 app = Flask(__name__)
 
-# CACHE_THRESHOLD sets the maximum amount entries allowed to be cached.
-# 512 should keep it under 512MB.
-cache = Cache(app, config={"CACHE_TYPE": "simple","CACHE_THRESHOLD": 512,
-                            "CACHE_DEFAULT_TIMEOUT": 3600})
+# CACHE_THRESHOLD sets the maximum number of entries allowed to be cached.
+# 1024 should keep it easily under 1024 MB.
+cache = Cache(app, config={"CACHE_TYPE": "simple","CACHE_THRESHOLD": 1024,
+                            "CACHE_DEFAULT_TIMEOUT": 6*60*60})
 
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
@@ -79,9 +79,6 @@ def articles():
 
     article_rows = db.execute(sql, params).fetchall()
     
-    # Change the sqlite3 Rows into dicts so they're mutable and JSON-able.
-    article_rows = [dict(zip(row.keys(), row)) for row in article_rows]
-
     author_rows_list = []
     for row in article_rows:
         author_rows = db.execute("SELECT f_name, l_name, affiliation FROM article_authors WHERE pubmed_id=?",
@@ -91,28 +88,29 @@ def articles():
 
     mesh_terms_list = []
     for row in article_rows:
-        mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, '¤') FROM article_mesh \
+        mesh_terms = db.execute("SELECT DISTINCT mesh FROM article_mesh \
                                 INNER JOIN article_authors ON article_mesh.pubmed_id=article_authors.pubmed_id \
-                                WHERE article_mesh.pubmed_id = ?",
-                                (str(row["pubmed_id"]),)
-                                ).fetchone()
-        mesh_terms = mesh_terms[0].split("¤")
-        mesh_terms = sorted(list(set(mesh_terms)))
-        mesh_terms_list.append(mesh_terms)
+                                WHERE article_mesh.pubmed_id = ? \
+                                ORDER BY mesh",
+                                (row["pubmed_id"],)
+                                ).fetchall()
+        mesh_terms_list.append([mesh_term[0] for mesh_term in mesh_terms])
+    
+    # Change the sqlite3 Rows into dicts so they're mutable and JSON-able.
+    article_rows = [dict(row) for row in article_rows]
 
     for article, author_rows, mesh_terms in zip(article_rows, author_rows_list, mesh_terms_list):
         article["authors"] = [ {"f_name": author["f_name"], "l_name": author["l_name"],
                                 "affiliation": author["affiliation"]} for author in author_rows ]
         article["mesh"] = mesh_terms
 
+    
     return jsonify(article_rows)
 
 
 @app.route("/authors", methods=["GET"])
 @cache.cached(query_string=True)
 def authors():
-
-    print(request.args)
 
     sql = "SELECT DISTINCT authors.f_name, authors.l_name FROM authors \
             INNER JOIN article_authors ON authors.f_name=article_authors.f_name AND authors.l_name=article_authors.l_name \
@@ -152,32 +150,28 @@ def authors():
     sql += order_by
     sql += " LIMIT " + str(limit_start) + ", " + str(limit_size)
 
-    print(sql)
-
     author_rows = db.execute(sql, params).fetchall()
-
+    
     mesh_terms_list = []
     for row in author_rows:
-        mesh_terms = db.execute("SELECT DISTINCT group_concat(mesh, '¤') FROM article_mesh \
+        mesh_terms = db.execute("SELECT DISTINCT mesh FROM article_mesh \
                                 INNER JOIN article_authors ON article_mesh.pubmed_id=article_authors.pubmed_id \
-                                WHERE (article_authors.f_name LIKE ? AND article_authors.l_name LIKE ?)",
+                                WHERE (article_authors.f_name = ? AND article_authors.l_name = ?) \
+                                ORDER BY mesh",
                                 (row["f_name"], row["l_name"])
-                                ).fetchone()
-        mesh_terms = mesh_terms[0].split("¤")
-        mesh_terms = sorted(list(set(mesh_terms)))
-        mesh_terms_list.append(mesh_terms)
+                                ).fetchall()
+        mesh_terms_list.append([mesh_term[0] for mesh_term in mesh_terms])
 
     affiliations_list = []
     for row in author_rows:
-        affiliations = db.execute("SELECT DISTINCT group_concat(affiliation, '¤') FROM article_authors \
-                                    WHERE (article_authors.f_name LIKE ? AND article_authors.l_name LIKE ?)",
+        affiliations = db.execute("SELECT DISTINCT affiliation FROM article_authors \
+                                    WHERE (article_authors.f_name = ? AND article_authors.l_name = ?) \
+                                    ORDER BY affiliation",
                                     (row["f_name"], row["l_name"])
-                                    ).fetchone()
-        affiliations = affiliations[0].split("¤")
-        affiliations = sorted(list(set(affiliations)))
-        affiliations_list.append(affiliations)
+                                    ).fetchall()
+        affiliations_list.append([affiliation[0] for affiliation in affiliations])
 
-    author_rows = [dict(zip(row.keys(), row)) for row in author_rows]
+    author_rows = [dict(row) for row in author_rows]
 
     for author, mesh_terms, affiliations in zip(author_rows, mesh_terms_list, affiliations_list):
         author["mesh"] = mesh_terms
