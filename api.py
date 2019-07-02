@@ -4,16 +4,11 @@ from flask_caching import Cache
 
 app = Flask(__name__)
 
-# CACHE_THRESHOLD sets the maximum number of entries allowed to be cached.
-# 1024 should keep it easily under 1024 MB.
-cache = Cache(app, config={"CACHE_TYPE": "simple","CACHE_THRESHOLD": 1024,
-                            "CACHE_DEFAULT_TIMEOUT": 6*60*60})
-
 db = sqlite3.connect("../test.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
 
 def page_limits(per_page=None, page_number=None):
-    # Default limit. Start from 0, return first 100 results
+    # Default limit. Start from 0, return first 20 results
     limit_start = 0
     limit_size = 20
 
@@ -40,7 +35,6 @@ def root():
 
 
 @app.route('/articles', methods=["GET"])
-@cache.cached(query_string=True)
 def articles():
 
     sql = "SELECT DISTINCT abstract, pub_year, articles.pubmed_id, title FROM articles \
@@ -109,7 +103,6 @@ def articles():
 
 
 @app.route("/authors", methods=["GET"])
-@cache.cached(query_string=True)
 def authors():
 
     sql = "SELECT DISTINCT authors.f_name, authors.l_name FROM authors \
@@ -181,7 +174,6 @@ def authors():
 
 
 @app.route("/all_mesh_terms", methods=["GET"])
-@cache.cached(query_string=True)
 def all_mesh_terms():
     mesh_terms = db.execute("SELECT DISTINCT mesh FROM article_mesh")
     mesh_terms = [mesh[0] for mesh in mesh_terms]
