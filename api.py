@@ -4,7 +4,7 @@ from flask_caching import Cache
 
 app = Flask(__name__)
 
-db = sqlite3.connect("../test.db", check_same_thread=False)
+db = sqlite3.connect("../neuro.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
 
 def page_limits(per_page=None, page_number=None):

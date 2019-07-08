@@ -7,7 +7,7 @@ from tqdm import tqdm
 with open("../mesh_ids.json") as f:
     neuro_mesh_ids = set(json.load(f))
 
-db = sqlite3.connect("../neuro.db")
+db = sqlite3.connect("../neuro.db", timeout=30)
 
 def get_mesh(input_file):
     
@@ -48,8 +48,8 @@ def get_mesh(input_file):
 
         # Add ArticleDate as first choice, then parse PubDate in <JournalIssue>.
         pub_date_node = doc.find(".//PubDate")
-        if pub_date_node.find("Year") is None:
-            print("wat", pub_date_node.find("MedlineDate").text)
+        # if pub_date_node.find("Year") is None:
+        #     print("wat", pub_date_node.find("MedlineDate").text)
         
         article_date_node = doc.find(".//ArticleDate")
 
@@ -93,16 +93,22 @@ def get_mesh(input_file):
             if len(aff_nodes) == 0:
                 affiliations = last_affiliations
             else:
-                affiliations = [aff.text for aff in aff_nodes]
+                affiliations = ["".join(aff.itertext()) for aff in aff_nodes]
                 last_affiliations = affiliations
 
             article["author_list"].append( (firstname, lastname, "; ".join(affiliations)) )
         
         articles.append(article)
-    
-    if len(articles) > 0:
+
+        return articles
+
+if __name__ == "__main__":
+    all_articles = []
+    for arg in tqdm(sys.argv[1:]):
+        all_articles.extend(get_mesh(arg))
+    if len(all_articles) > 0:
         with db:   
-            for article in tqdm(articles, desc="Processing"):
+            for article in all_articles:
                 mesh_ids = [ part["mesh_id"] for part in article["mesh_list"] ]
                 if any(mesh in neuro_mesh_ids for mesh in mesh_ids):
                     if any(re.search(r"Finland", author[2]) for author in article["author_list"]):
@@ -124,6 +130,4 @@ def get_mesh(input_file):
                             if re.search(r"Finland", author[2]):
                                 db.execute("INSERT OR REPLACE INTO authors(f_name, l_name) VALUES (?,?)",
                                             (author[0], author[1]) )
-
-if __name__ == "__main__":
-    get_mesh(sys.argv[1])
+    
