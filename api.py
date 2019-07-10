@@ -1,10 +1,9 @@
 import  sqlite3
-from flask import Flask, Response, request, json, jsonify, url_for
-from flask_caching import Cache
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-db = sqlite3.connect("../neuro.db", check_same_thread=False)
+db = sqlite3.connect("../neuro2.db", check_same_thread=False)
 db.row_factory = sqlite3.Row
 
 def page_limits(per_page=None, page_number=None):
@@ -180,48 +179,6 @@ def all_mesh_terms():
 
     return jsonify(mesh_terms)
 
-# @app.route("/article_info", methods=["GET"])
-# def article_info():
-#     author_rows = db.execute("SELECT f_name, l_name, affiliation FROM article_authors WHERE pubmed_id=?",
-#                         (request.args.get("pubmed_id"),)
-#                         ).fetchall()
-#     author_rows = [{"f_name": author[0], "l_name": author[1], "affiliation": author[2]} for author in author_rows]
-#     print(author_rows)
-
-#     mesh_terms = db.execute("SELECT group_concat(mesh, '¤') FROM article_mesh WHERE pubmed_id=?",
-#                             (request.args.get("pubmed_id"),)
-#                             ).fetchone()
-#     mesh_terms = mesh_terms[0].split("¤")
-#     print(mesh_terms)
-    
-#     info = db.execute("SELECT * FROM articles WHERE pubmed_id=?",
-#                         (request.args.get("pubmed_id"),)
-#                         ).fetchone()
-#     print(info)
-
-#     response = {thing[0]: thing[1] for thing in zip(info.keys(), info)}
-#     response["authors"] = author_rows
-#     response["mesh"] = mesh_terms
-
-#     return jsonify(response)
-
-# @app.route("/binary_prediction", methods=["POST"])
-# def binary_prediction():
-    
-#     ret_val = []
-#     for entry in request.json:
-#         if re.search(r"Finland", entry["country"]):
-#             ret_val.append(make_binary_prediction(entry["abstract"]))
-
-#         # Check for "Finland" in any of the author strings.
-#         if any([re.search(r"Finland", author) for author in entry["authors"]]):
-#             print(entry["authors"])
-#             ret_val.append(make_binary_prediction(entry["abstract"]))
-#         else:
-#             ret_val.append(False)
-
-#     #results = make_binary_prediction(request.json[])
-#     return Response(json.dumps(ret_val, indent=2, sort_keys=True), status=200, mimetype="application/json")
 
 if __name__ == '__main__':
     app.run()

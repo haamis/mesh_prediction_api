@@ -57,7 +57,4 @@ def make_binary_prediction(abstract):
         preds[probs>0.5] = 1
         
         print("Aggregating results")
-        if preds[0][1] == 1:
-            return True
-        else:
-            return False
+        return preds[0][1] == 1
