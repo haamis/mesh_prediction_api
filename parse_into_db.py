@@ -1,6 +1,7 @@
 import gzip, json, re, sqlite3, sys
 #import xml.etree.cElementTree as ET
 import lxml.etree as ET
+# lxml is about 2x faster, seemingly because of parse().
 from tqdm import tqdm
 from timeit import default_timer as timeit
 import bert_multilabel_predictor
@@ -106,7 +107,6 @@ def get_mesh(input_file):
                 article["pub_year"] = ( article_date_node or pub_date_node ).find("Year").text
         else:
             article["pub_year"] = ( article_date_node or pub_date_node ).find("Year").text
-
         
         articles.append(article)
 

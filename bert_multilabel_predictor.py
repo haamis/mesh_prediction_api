@@ -22,7 +22,7 @@ custom_objects["tf"] = tf
 
 model = load_model("../bert_best_finetuned.h5", custom_objects=custom_objects)
 
-with open("../complete_output.json_class_labels.txt") as f:
+with open("../old_complete_output.json_class_labels.txt") as f:
     label_mapping = np.array(json.load(f))
 
 with open("../mesh_mapping.json") as f:
